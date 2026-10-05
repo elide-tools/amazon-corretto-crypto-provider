@@ -1,0 +1,93 @@
+name: Elide build
+
+# Builds and tests the `elide` branch (upstream main + Elide's AWS-LC pin) and publishes release
+# jars for `*-elide.*` tags. Classifier names match the Maven Central artifacts Elide consumes.
+on:
+  push:
+    branches: [elide]
+    tags: ['*-elide.*']
+  pull_request:
+    branches: [elide]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: "Build (${{ matrix.classifier }})"
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { classifier: linux-x86_64, runner: ubuntu-24.04 }
+          - { classifier: linux-aarch_64, runner: ubuntu-24.04-arm }
+          - { classifier: osx-aarch_64, runner: macos-15 }
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          submodules: true
+          persist-credentials: false
+      # JDK 21 exposes javax.crypto.KEM, which the ML-KEM Multi-Release overlay needs at build time.
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          java-version: '21'
+          distribution: corretto
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: stable
+          cache: false
+      - name: Tools (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -qq -y --no-install-recommends cmake ninja-build
+      - name: Tools (macOS)
+        if: runner.os == 'macOS'
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: brew install --quiet cmake ninja
+      - name: Check AWS-LC pin
+        run: |
+          want="$(sed -n "s/^ext.awsLcMainTag = '\(.*\)'/\1/p" build.gradle)"
+          have="$(git -C aws-lc describe --tags --exact-match 2>/dev/null || git -C aws-lc rev-parse HEAD)"
+          echo "awsLcMainTag=$want submodule=$have"
+          git -C aws-lc fetch -q --depth=1 origin "refs/tags/$want:refs/tags/$want"
+          test "$(git -C aws-lc rev-parse HEAD)" = "$(git -C aws-lc rev-parse "$want^{commit}")"
+      - name: Build and unit tests
+        run: ./gradlew --no-daemon build unit_tests
+      - name: Stage jar
+        id: stage
+        run: |
+          v="$(sed -n "s/^version = '\(.*\)'/\1/p" build.gradle)"
+          mkdir -p dist
+          cp build/lib/AmazonCorrettoCryptoProvider.jar "dist/AmazonCorrettoCryptoProvider-$v-${{ matrix.classifier }}.jar"
+          ls -la dist
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: accp-${{ matrix.classifier }}
+          path: dist/*.jar
+          if-no-files-found: error
+
+  release:
+    name: Release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          cd dist
+          for f in *.jar; do sha256sum "$f" > "$f.sha256"; done
+          ls -la
+          gh release create "$TAG" ./* --repo "$GITHUB_REPOSITORY" --title "ACCP $TAG" \
+            --notes "Upstream corretto/amazon-corretto-crypto-provider main with AWS-LC pinned to match Elide (aws-lc-sys) and elide-dev/toolchain. Built from $GITHUB_SHA."
