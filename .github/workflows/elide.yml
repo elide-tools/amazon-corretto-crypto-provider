@@ -116,7 +116,7 @@ jobs:
             echo "version=$TOOLCHAIN_VERSION" >> "$GITHUB_OUTPUT"
           fi
       # Same commit as TOOLCHAIN_ACTION_REF in elide/toolchain.env.
-      - uses: elide-dev/toolchain/action@03ef2a7fe6d1d38fa3cbb0f6399ecdf136938a81
+      - uses: elide-dev/toolchain/action@53b07cdc93ca8d9ba1be65725aa3362e1d4c1c09 # v2026.10.0
         with:
           version: ${{ steps.tc.outputs.version || 'latest' }}
           archive: ${{ steps.tc.outputs.archive }}
