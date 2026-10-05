@@ -66,7 +66,7 @@ jobs:
           if [ "${{ matrix.classifier }}" = linux-x86_64 ]; then
             ./gradlew --no-daemon src_jar
             cp build/lib/AmazonCorrettoCryptoProvider-sources.jar "dist/AmazonCorrettoCryptoProvider-$v-sources.jar"
-            unzip -l "dist/AmazonCorrettoCryptoProvider-$v-sources.jar" | grep -q 'csrc/loader.cpp'
+            unzip -l "dist/AmazonCorrettoCryptoProvider-$v-sources.jar" | grep -c 'csrc/loader.cpp' >/dev/null
           fi
           ls -la dist
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
