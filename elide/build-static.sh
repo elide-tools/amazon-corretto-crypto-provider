@@ -14,7 +14,7 @@ set -euo pipefail
 
 jar="$(cd "$(dirname "$1")" && pwd -P)/$(basename "$1")"
 triple="$2"
-out="$3"
+out="$(mkdir -p "$3" && cd "$3" && pwd -P)"   # absolute: the archive step runs from $obj
 tc="${ELIDE_TOOLCHAIN_HOME:?set ELIDE_TOOLCHAIN_HOME to the toolchain bundle}"
 jdk="${JAVA_HOME:?set JAVA_HOME}"
 [ -f "$jar" ] || { echo "no sources jar: $jar" >&2; exit 1; }
