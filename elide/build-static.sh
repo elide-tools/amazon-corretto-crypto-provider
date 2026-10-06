@@ -38,10 +38,11 @@ src="$work/source" hdr="$work/headers" cls="$work/classes" obj="$work/obj"
 mkdir -p "$src" "$hdr" "$cls" "$obj" "$out/lib"
 (cd "$src" && "$jdk/bin/jar" xf "$jar")
 
-# JNI headers for the native methods. --release 17, not 8: 2.6.0's ML-KEM Multi-Release overlay
-# (jdk17plus/) needs JDK 17 APIs; javac -h emits the same headers either way.
+# JNI headers for the native methods (the classes are discarded). --release 21: 2.6.0's ML-KEM
+# overlay (jdk17plus/) uses javax.crypto.KEM, which JDK 17 only gained in updates (absent from
+# --release 17's API) and 21 has as standard; javac -h emits the same headers at any level.
 find "$src" -name '*.java' ! -name module-info.java -print0 \
-  | xargs -0 "$jdk/bin/javac" -nowarn --release 17 -h "$hdr" -d "$cls"
+  | xargs -0 "$jdk/bin/javac" -nowarn --release 21 -h "$hdr" -d "$cls"
 (cd "$hdr" && for h in *.h; do echo "#include \"$h\""; done) > "$hdr/generated-headers.h"
 
 # config.h: the features clang/libc++ provide (CMake would probe these).
