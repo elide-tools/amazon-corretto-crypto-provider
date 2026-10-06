@@ -14,6 +14,11 @@ on:
 permissions:
   contents: read
 
+env:
+  # Base bytecode level of the provider jars (upstream default 8). Elide and the other consumers run
+  # on JDK 17+ (GraalVM 25), and 17 + a JDK 21 build is a combination upstream's CMake supports.
+  TARGET_JDK_VERSION: "17"
+
 jobs:
   build:
     name: "Build (${{ matrix.classifier }})"
@@ -56,7 +61,7 @@ jobs:
           git -C aws-lc fetch -q --depth=1 origin "refs/tags/$want:refs/tags/$want"
           test "$(git -C aws-lc rev-parse HEAD)" = "$(git -C aws-lc rev-parse "$want^{commit}")"
       - name: Build and unit tests
-        run: ./gradlew --no-daemon build unit_tests
+        run: ./gradlew --no-daemon -DTARGET_JDK_VERSION="$TARGET_JDK_VERSION" build unit_tests
       - name: Stage jar
         id: stage
         run: |
@@ -65,7 +70,7 @@ jobs:
           cp build/lib/AmazonCorrettoCryptoProvider.jar "dist/AmazonCorrettoCryptoProvider-$v-${{ matrix.classifier }}.jar"
           # The sources classifier carries csrc/, which Elide compiles into its static JNI adapter.
           if [ "${{ matrix.classifier }}" = linux-x86_64 ]; then
-            ./gradlew --no-daemon src_jar
+            ./gradlew --no-daemon -DTARGET_JDK_VERSION="$TARGET_JDK_VERSION" src_jar
             cp build/lib/AmazonCorrettoCryptoProvider-sources.jar "dist/AmazonCorrettoCryptoProvider-$v-sources.jar"
             unzip -l "dist/AmazonCorrettoCryptoProvider-$v-sources.jar" | grep -c 'csrc/loader.cpp' >/dev/null
           fi
