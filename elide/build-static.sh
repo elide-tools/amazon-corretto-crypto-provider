@@ -28,7 +28,10 @@ have="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["compone
 
 case "$triple" in
   *-linux-*) lto=(-flto=thin -ffat-lto-objects); jni_os=linux ;;
-  *-apple-darwin*) lto=(-flto=thin); jni_os=darwin ;;
+  *-apple-darwin*)
+    lto=(-flto=thin); jni_os=darwin
+    # The bundle's clang finds the macOS SDK through SDKROOT (as elide-toolchain env sets it).
+    if [ -z "${SDKROOT:-}" ]; then SDKROOT="$(xcrun --show-sdk-path)"; export SDKROOT; fi ;;
   *) echo "unsupported triple: $triple" >&2; exit 1 ;;
 esac
 
@@ -43,7 +46,9 @@ mkdir -p "$src" "$hdr" "$cls" "$obj" "$out/lib"
 # --release 17's API) and 21 has as standard; javac -h emits the same headers at any level.
 find "$src" -name '*.java' ! -name module-info.java -print0 \
   | xargs -0 "$jdk/bin/javac" -nowarn --release 21 -h "$hdr" -d "$cls"
-(cd "$hdr" && for h in *.h; do echo "#include \"$h\""; done) > "$hdr/generated-headers.h"
+# Written outside $hdr first: redirecting into $hdr would make the glob include the file itself.
+(cd "$hdr" && for h in *.h; do echo "#include \"$h\""; done) > "$work/generated-headers.h"
+mv "$work/generated-headers.h" "$hdr/generated-headers.h"
 
 # config.h: the features clang/libc++ provide (CMake would probe these).
 supported=" HAVE_ATTR_COLD HAVE_ATTR_NORETURN HAVE_ATTR_ALWAYS_INLINE HAVE_ATTR_NOINLINE HAVE_IS_TRIVIALLY_COPYABLE HAVE_NULLPTR HAVE_NOEXCEPT "
